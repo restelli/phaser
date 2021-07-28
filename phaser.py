@@ -1,6 +1,6 @@
 from migen import *
 from misoc.cores.spi2 import SPIMachine, SPIInterface
-from misoc.cores.duc import PhasedDUC
+from misoc.cores.duc import PhasedDUC, CosSinGen
 
 from crg import CRG
 from link import Link
@@ -190,6 +190,11 @@ class Phaser(Module):
         for ch in range(2):
             duc = PhasedDUC(n=2, pwidth=19, fwidth=32, zl=10)
             self.submodules += duc
+            cd = []
+            cd[0] = CosSinGen(z=16, x=16, zl=9, xd=4, backoff=None, share_lut=None) # TBD: Find optimal values for z1 and xd
+            self.submodules += cd[0]
+            cd[1] = CosSinGen(z=16, x=16, zl=9, xd=4, backoff=None, share_lut=None) # TBD: Find optimal values for z1 and xd
+            self.submodules += cd[1]
             cfg = self.decoder.get("duc{}_cfg".format(ch), "write")
             self.sync += [
                 # keep accu cleared
@@ -206,14 +211,15 @@ class Phaser(Module):
                 ),
             ]
             for t, (ti, to) in enumerate(zip(duc.i, duc.o)):
-                self.comb += [
+                self.comb += [                 
                     ti.i.eq(self.decoder.data[t][ch].i),
                     ti.q.eq(self.decoder.data[t][ch].q),
+                    cd[t].z.eq(to.i)
                 ]
                 self.sync += [
                     If(cfg[2:4] == 0,  # ducx_cfg_sel
-                        self.dac.data[2*t][ch].eq(to.i),
-                        self.dac.data[2*t + 1][ch].eq(to.q),
+                        self.dac.data[2*t][ch].eq(cd[t].x),
+                        self.dac.data[2*t + 1][ch].eq(cd[t].y),
                     )
                 ]
 
